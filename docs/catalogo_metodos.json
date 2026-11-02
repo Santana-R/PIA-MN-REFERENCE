@@ -1,0 +1,915 @@
+[
+  {
+    "id": "I01",
+    "nombre": "Algoritmo de Neville",
+    "familia": "Interpolación",
+    "refs": [
+      1
+    ],
+    "funcion": "neville(x, y, consulta)",
+    "idea": "Imagina que quieres conocer un valor entre datos de una tabla. Neville empieza con valores individuales, forma rectas entre pares y combina esas aproximaciones hasta utilizar todos los nodos. Calcula el valor solicitado sin expandir el polinomio completo.",
+    "entradas": "x contiene nodos crecientes distintos; y contiene sus valores. consulta es el punto donde se evalúa el interpolante.",
+    "formulas": [
+      "Q_{i,0}=y_i",
+      "Q_{i,j}=\\frac{(z-x_{i-j})Q_{i,j-1}-(z-x_i)Q_{i-1,j-1}}{x_i-x_{i-j}}"
+    ],
+    "simbolos": "z representa consulta; j indica cuántas combinaciones se han realizado e i identifica el último nodo del grupo. Q es una tabla triangular.",
+    "pasos": [
+      "Coloca los valores y en la primera columna de Q.",
+      "Combina dos celdas de la columna anterior usando los nodos de sus extremos.",
+      "Repite con grupos de tres, cuatro y más nodos.",
+      "Devuelve la última celda: utiliza todos los datos."
+    ],
+    "ejemplo": "Para (0,0), (1,1), (2,4) y z=1.5, las rectas dan 1.5 y 2.5. La siguiente combinación es (1.5·2.5−(−0.5)·1.5)/2=2.25. Coincide con z².",
+    "r": "Q es una matriz; dos ciclos recorren sus columnas y filas. En R los índices empiezan en 1: la primera columna representa j=0 de la fórmula.",
+    "cuidado": "Un nodo repetido hace cero un denominador. Que haya más datos no garantiza una mejor aproximación fuera de ellos; aquí se evalúa un polinomio, no se busca una raíz.",
+    "conteo": "Es un procedimiento directo. Los niveles de la tabla no se presentan como iteraciones de convergencia. iteraciones permanece pendiente.",
+    "prueba": "Reproducir exactamente, salvo redondeo, un polinomio de grado menor que el número de nodos.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/interpolacion/I01_neville.R"
+  },
+  {
+    "id": "I02",
+    "nombre": "Spline cúbico natural",
+    "familia": "Interpolación",
+    "refs": [
+      2
+    ],
+    "funcion": "spline_natural(x, y, consulta)",
+    "idea": "En lugar de forzar un único polinomio por todos los datos, construye una curva cúbica en cada intervalo. Las piezas se unen con la misma pendiente y curvatura. La condición natural fija curvatura cero en los extremos.",
+    "entradas": "Nodos x crecientes, valores y y una consulta dentro del intervalo de datos.",
+    "formulas": [
+      "h_i=x_{i+1}-x_i,\\quad M_0=M_{N-1}=0",
+      "h_{i-1}M_{i-1}+2(h_{i-1}+h_i)M_i+h_iM_{i+1}=6(d_i-d_{i-1})",
+      "S(z)=Ay_i+By_{i+1}+\\frac{h_i^2}{6}[(A^3-A)M_i+(B^3-B)M_{i+1}]"
+    ],
+    "simbolos": "d_i=(y_(i+1)−y_i)/h_i; M_i es la segunda derivada en el nodo. A=(x_(i+1)−z)/h_i y B=(z−x_i)/h_i.",
+    "pasos": [
+      "Calcula los tamaños h y las pendientes d de cada intervalo.",
+      "Arma el sistema para las segundas derivadas interiores.",
+      "Resuélvelo con eliminación propia y agrega los dos ceros naturales.",
+      "Localiza el intervalo de consulta y evalúa su expresión cúbica."
+    ],
+    "ejemplo": "Con x=(0,1,2), y=(0,1,0), la ecuación interior es 4M₁=−12, así que M=(0,−3,0). En z=0.5, A=B=0.5 y S(0.5)=0.6875.",
+    "r": "Los coeficientes interiores se calculan con gauss_propio(). No se llama a spline() ni a solve(). Con dos nodos la expresión se reduce a una recta.",
+    "cuidado": "Natural no significa pendiente cero. Tampoco es la condición not a knot usada en otros programas. La rutina rechaza consultas fuera de los datos.",
+    "conteo": "La factorización y la evaluación son directas; el criterio comparativo de iteraciones está pendiente.",
+    "prueba": "Comprobar los valores en los nodos y las segundas derivadas nulas en los extremos.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/interpolacion/I02_spline_natural.R"
+  },
+  {
+    "id": "I03",
+    "nombre": "Interpolación PCHIP",
+    "familia": "Interpolación",
+    "refs": [
+      3,
+      4
+    ],
+    "funcion": "pchip(x, y, consulta)",
+    "idea": "PCHIP une polinomios cúbicos de Hermite. Su decisión principal es cómo escoger las pendientes en los nodos para evitar oscilaciones que contradigan la monotonía de los datos.",
+    "entradas": "Nodos x estrictamente crecientes, valores y y una consulta interior.",
+    "formulas": [
+      "d_i=\\frac{y_{i+1}-y_i}{h_i},\\quad h_i=x_{i+1}-x_i",
+      "m_i=\\frac{w_1+w_2}{w_1/d_{i-1}+w_2/d_i},\\quad w_1=2h_i+h_{i-1},\\quad w_2=h_i+2h_{i-1}",
+      "P(t)=(2t^3-3t^2+1)y_i+(t^3-2t^2+t)h_im_i",
+      "\\qquad+(-2t^3+3t^2)y_{i+1}+(t^3-t^2)h_im_{i+1}"
+    ],
+    "simbolos": "t=(z−x_i)/h_i. Si las pendientes vecinas cambian de signo o alguna es cero, se fija m_i=0. En los extremos se usa una fórmula unilateral y se limita su signo y magnitud.",
+    "pasos": [
+      "Calcula las pendientes secantes de los intervalos.",
+      "Obtén cada pendiente interior con la regla de signo y la media armónica.",
+      "Calcula la pendiente unilateral del extremo; si cambia el signo, usa cero; si procede, limítala a tres veces la secante.",
+      "Evalúa la base cúbica de Hermite del intervalo."
+    ],
+    "ejemplo": "Para x=(0,1,2), y=(0,1,1.5), las secantes son 1 y 0.5. La pendiente interior resulta 2/3; la inicial es 1.25. En z=0.5 se obtiene aproximadamente 0.5729167.",
+    "r": "La función extremo() contiene las limitaciones de borde. Con dos datos se utilizan las dos pendientes iguales a la secante.",
+    "cuidado": "PCHIP es continuo junto con su primera derivada; la segunda puede saltar. No equivale al spline natural.",
+    "conteo": "No hay convergencia iterativa en esta formulación. El conteo para desempeño sigue pendiente.",
+    "prueba": "Recuperar los nodos y verificar que datos crecientes no produzcan descensos ni sobrepasen los extremos de cada tramo.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/interpolacion/I03_pchip.R"
+  },
+  {
+    "id": "I04",
+    "nombre": "Interpolación bilineal",
+    "familia": "Interpolación",
+    "refs": [
+      5
+    ],
+    "funcion": "bilineal(x, y, Z, consulta_x, consulta_y)",
+    "idea": "Sirve para estimar un valor dentro de un rectángulo, conociendo sus cuatro esquinas. Primero puede imaginarse una interpolación horizontal en cada borde y después una vertical entre ambos resultados.",
+    "entradas": "x=(x₁,x₂), y=(y₁,y₂), una matriz Z de 2 por 2 y el punto interior. Las filas de Z corresponden a y y las columnas a x.",
+    "formulas": [
+      "u=\\frac{x-x_1}{x_2-x_1},\\quad v=\\frac{y-y_1}{y_2-y_1}",
+      "z=(1-u)(1-v)z_{11}+u(1-v)z_{12}+(1-u)vz_{21}+uvz_{22}"
+    ],
+    "simbolos": "u y v son posiciones relativas entre 0 y 1. Cada producto es el peso de una esquina; los cuatro pesos suman uno.",
+    "pasos": [
+      "Comprueba que el rectángulo tenga ancho y alto positivos.",
+      "Convierte la consulta a las coordenadas u y v.",
+      "Calcula los cuatro pesos.",
+      "Multiplica cada esquina por su peso y suma."
+    ],
+    "ejemplo": "Con Z=[[0,2],[3,5]] en el cuadrado unidad, el centro tiene u=v=0.5. Los cuatro pesos son 0.25 y el resultado es (0+2+3+5)/4=2.5.",
+    "r": "matrix(c(0,2,3,5), 2, byrow=TRUE) conserva el orden por filas del dibujo. Intercambiar filas y columnas cambia la interpretación.",
+    "cuidado": "No debe compararse directamente con interpoladores de una sola variable usando datos distintos. La rutina no extrapola fuera del rectángulo.",
+    "conteo": "La fórmula es directa. No se reportan cuatro esquinas como cuatro iteraciones.",
+    "prueba": "Recuperar las cuatro esquinas y reproducir una función de la forma a+b·x+c·y+d·x·y.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/interpolacion/I04_bilineal.R"
+  },
+  {
+    "id": "I05",
+    "nombre": "Interpolación de Shepard",
+    "familia": "Interpolación",
+    "refs": [
+      6
+    ],
+    "funcion": "shepard(x, y, z, consulta_x, consulta_y, p=2)",
+    "idea": "Combina datos dispersos dando mayor peso a los puntos cercanos. No necesita una malla rectangular. El exponente p controla cuánto predominan los vecinos más próximos.",
+    "entradas": "Posiciones (x_i,y_i), valores z_i, una consulta y p positivo.",
+    "formulas": [
+      "r_i=\\sqrt{(x-x_i)^2+(y-y_i)^2},\\quad w_i=r_i^{-p}",
+      "S(x,y)=\\frac{\\sum_i w_i z_i}{\\sum_i w_i}"
+    ],
+    "simbolos": "r_i es una distancia. El valor final es un promedio ponderado. Si la consulta coincide con un dato, se devuelve directamente su valor.",
+    "pasos": [
+      "Verifica que no haya posiciones repetidas.",
+      "Calcula las distancias a todos los datos.",
+      "Resuelve primero el caso de distancia cero.",
+      "Normaliza los pesos y calcula el promedio."
+    ],
+    "ejemplo": "En las cuatro esquinas del cuadrado unidad, todos los puntos están a la misma distancia del centro. Por eso, para valores 0,2,3,5, el centro vale 2.5. En la esquina cuyo dato es 5 se devuelve 5 sin dividir entre cero.",
+    "r": "El código utiliza (distancia_mínima/distancia)^p. Este escalado conserva los pesos relativos y reduce problemas por números demasiado grandes.",
+    "cuidado": "p=2 es una elección del ejemplo, no una constante obligatoria del método. Shepard global puede aplanar la curva cerca de los datos y no reproduce todo plano.",
+    "conteo": "El recorrido de datos no se identifica automáticamente con iteraciones comparativas.",
+    "prueba": "Reproducir valores en los nodos y cualquier conjunto de valores constantes.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/interpolacion/I05_shepard.R"
+  },
+  {
+    "id": "I06",
+    "nombre": "Interpolación trigonométrica",
+    "familia": "Interpolación",
+    "refs": [
+      7
+    ],
+    "funcion": "trigonometrica(y, consulta, periodo=2*pi, origen=0)",
+    "idea": "Cuando los datos describen un fenómeno periódico, una combinación de senos y cosenos respeta esa periodicidad. Aquí se usa un número impar de muestras equiespaciadas.",
+    "entradas": "N=2m+1 valores de un periodo T. Sus nodos son origen+j·T/N, j=0,...,N−1. No se repite el extremo del periodo.",
+    "formulas": [
+      "p(\\theta)=\\frac{a_0}{2}+\\sum_{k=1}^{m}[a_k\\cos(k\\theta)+b_k\\sin(k\\theta)]",
+      "a_k=\\frac{2}{N}\\sum_{j=0}^{N-1}y_j\\cos(k\\theta_j),\\quad b_k=\\frac{2}{N}\\sum_{j=0}^{N-1}y_j\\sin(k\\theta_j)",
+      "\\theta_j=\\frac{2\\pi j}{N},\\quad \\theta=\\frac{2\\pi(z-\\mathrm{origen})}{T}"
+    ],
+    "simbolos": "a₀/2 es el promedio de los datos. k identifica una frecuencia y θ transforma cualquier periodo a un ángulo.",
+    "pasos": [
+      "Comprueba que N sea impar y el periodo positivo.",
+      "Calcula los ángulos de las muestras.",
+      "Acumula los coeficientes de cada seno y coseno.",
+      "Evalúa el mismo conjunto de frecuencias en la consulta."
+    ],
+    "ejemplo": "Toma cinco muestras de 2+sin(x)+0.5cos(2x) sobre [0,2π), sin incluir 2π. Como las frecuencias son 1 y 2, el interpolante recupera esa expresión y su valor en 0.7.",
+    "r": "Se implementan las sumas con ciclos y funciones trigonométricas estándar. No se usa FFT ni un paquete de Fourier.",
+    "cuidado": "Las fórmulas cambian con un número par de muestras. Repetir el primer dato al final altera N y rompe esta formulación.",
+    "conteo": "Las frecuencias y las muestras no se declaran como iteraciones sin una indicación docente.",
+    "prueba": "Recuperar las muestras y obtener el mismo valor al sumar un periodo a la consulta.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/interpolacion/I06_trigonometrica.R"
+  },
+  {
+    "id": "R01",
+    "nombre": "Método de Ridders",
+    "familia": "Raíces",
+    "refs": [
+      8
+    ],
+    "funcion": "ridders(f, a, b, tol=1e-8, max_iter=1000)",
+    "idea": "Conserva un intervalo que encierra una raíz y utiliza el punto medio para proponer una corrección. Si conocemos signos opuestos en los extremos y la función es continua, seguimos conservando una raíz dentro del intervalo.",
+    "entradas": "Función real continua, extremos a<b con cambio de signo, tolerancia y límite de ciclos.",
+    "formulas": [
+      "m=\\frac{a+b}{2},\\quad s=\\sqrt{f(m)^2-f(a)f(b)}",
+      "x=m+(m-a)\\frac{\\operatorname{sign}(f(a)-f(b))f(m)}{s}"
+    ],
+    "simbolos": "m es el punto medio. La raíz cuadrada es real al haber signos opuestos en los extremos. El signo de la corrección depende de los valores de ambos bordes.",
+    "pasos": [
+      "Revisa primero si un extremo ya cumple la tolerancia.",
+      "Evalúa el punto medio y, si procede, calcula la corrección.",
+      "Acepta el nuevo punto y comprueba su residuo.",
+      "Conserva el par de puntos que tenga signos opuestos y repite."
+    ],
+    "ejemplo": "En f(x)=x³−x−2, [1,2], tenemos f(1)=−2, f(2)=4 y f(1.5)=−0.125. La primera corrección queda cerca de 1.52208. El programa conserva el intervalo y refina el resultado.",
+    "r": "El radicando se calcula con los valores de f escalados para evitar desbordamientos. Si la corrección resulta inválida, el programa usa el punto medio.",
+    "cuidado": "Un cambio de signo no garantiza una raíz si hay una discontinuidad. No se usa para funciones complejas ni para raíces pares sin cambio de signo.",
+    "conteo": "Un ciclo externo que produce la aproximación aceptada cuenta una vez. Evaluar el punto medio y la corrección no cuenta como dos iteraciones.",
+    "prueba": "Verificar el cambio de signo conservado, la raíz en un extremo y que el contador coincida con las filas del historial.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/raices/R01_ridders.R"
+  },
+  {
+    "id": "R02",
+    "nombre": "Método de Brent y Dekker",
+    "familia": "Raíces",
+    "refs": [
+      9
+    ],
+    "funcion": "brent_dekker(f, a, b, tol=1e-8, max_iter=1000)",
+    "idea": "Combina pasos de interpolación con la protección de la bisección. Intenta aprovechar la forma local de la función, pero rechaza un salto que no reduzca suficientemente el intervalo o salga de la zona permitida.",
+    "entradas": "Función real continua y un intervalo con cambio de signo. Usa la misma tolerancia del resto de métodos de raíces.",
+    "formulas": [
+      "s=\\frac{a f(b)f(c)}{[f(a)-f(b)][f(a)-f(c)]}+\\frac{b f(a)f(c)}{[f(b)-f(a)][f(b)-f(c)]}",
+      "\\qquad+\\frac{c f(a)f(b)}{[f(c)-f(a)][f(c)-f(b)]}",
+      "s=b-f(b)\\frac{b-a}{f(b)-f(a)}\\quad\\mathrm{si\\ no\\ hay\\ tres\\ valores\\ distintos}"
+    ],
+    "simbolos": "a y b mantienen el encierro; b se organiza como el punto con menor residuo. c y d guardan puntos anteriores para decidir si el paso de interpolación es aceptable.",
+    "pasos": [
+      "Propón interpolación cuadrática inversa o secante.",
+      "Rechaza si s no está entre (3a+b)/4 y b.",
+      "También rechaza si el salto no reduce la mitad del paso de referencia o este ya es casi nulo.",
+      "Ante rechazo usa el punto medio; luego actualiza el intervalo por signos."
+    ],
+    "ejemplo": "Para x³−x−2 en [1,2], el primer intento secante es 4/3. Los siguientes pasos combinan información nueva y resguardos. La traza del caso R02 permite seguir las aproximaciones sin ejecutar una función externa.",
+    "r": "biseccion_previa distingue qué reducción se exige; c0 y d guardan el historial. No se llama a uniroot(), que ocultaría el algoritmo.",
+    "cuidado": "Hay varias implementaciones de Brent con decisiones de resguardo distintas. Por eso el conteo corresponde a esta variante documentada.",
+    "conteo": "Una propuesta aceptada por ciclo externo cuenta una iteración, incluso si proviene de bisección.",
+    "prueba": "Probar funciones crecientes y decrecientes, extremos que ya son raíz y casos con límite de iteraciones pequeño.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/raices/R02_brent_dekker.R"
+  },
+  {
+    "id": "R03",
+    "nombre": "Método de Müller",
+    "familia": "Raíces",
+    "refs": [
+      10
+    ],
+    "funcion": "muller(f, x0, x1, x2, tol=1e-8, max_iter=1000)",
+    "idea": "Ajusta una parábola a tres puntos recientes y utiliza una de sus raíces como la siguiente aproximación. A diferencia de la secante, puede dar un paso complejo aunque los puntos de inicio sean reales.",
+    "entradas": "Una función y tres puntos distintos. La función debe aceptar números complejos si el proceso los genera.",
+    "formulas": [
+      "h_1=x_1-x_0,\\quad h_2=x_2-x_1,\\quad \\delta_i=\\frac{f(x_i)-f(x_{i-1})}{h_i}",
+      "A=\\frac{\\delta_2-\\delta_1}{h_1+h_2},\\quad B=\\delta_2+h_2A,\\quad C=f(x_2)",
+      "x_3=x_2-\\frac{2C}{B\\pm\\sqrt{B^2-4AC}}"
+    ],
+    "simbolos": "La parábola se expresa alrededor de x₂. Entre los dos denominadores se elige el de mayor módulo para reducir la cancelación.",
+    "pasos": [
+      "Calcula separaciones y pendientes de los dos tramos.",
+      "Obtén A, B y C del ajuste cuadrático.",
+      "Calcula ambas opciones del denominador y elige la de mayor módulo.",
+      "Genera x₃ y desplaza la terna de puntos."
+    ],
+    "ejemplo": "Para f(x)=x²+1 con puntos 0,1,2, el ajuste reproduce exactamente la función. El discriminante es negativo; el programa trabaja en complejos y obtiene una raíz ±i. El ejemplo entregado obtiene i.",
+    "r": "sqrt(as.complex(...)) permite el discriminante negativo. Para comprobar la raíz se utiliza abs(f(x)), que en complejos es el módulo.",
+    "cuidado": "Dos puntos coincidentes, o x₂=x₀, invalidan las diferencias divididas. Una raíz compleja válida no debe rechazarse por no ser real.",
+    "conteo": "Cada nueva aproximación posterior a la terna inicial cuenta una iteración.",
+    "prueba": "Resolver un polinomio con raíz real y otro con raíces complejas; verificar el residuo de ambos.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/raices/R03_muller.R"
+  },
+  {
+    "id": "R04",
+    "nombre": "Método de Halley",
+    "familia": "Raíces",
+    "refs": [
+      11
+    ],
+    "funcion": "halley(f, df, ddf, x0, tol=1e-8, max_iter=1000)",
+    "idea": "Corrige el paso de Newton usando también la curvatura de la función. Cerca de una raíz simple y bajo condiciones de suavidad, su convergencia local puede ser cúbica.",
+    "entradas": "f, su primera derivada df, su segunda derivada ddf y una aproximación inicial.",
+    "formulas": [
+      "x_{k+1}=x_k-\\frac{2f(x_k)f'(x_k)}{2[f'(x_k)]^2-f(x_k)f''(x_k)}"
+    ],
+    "simbolos": "La primera derivada representa pendiente y la segunda curvatura. Ambas deben corresponder a la misma función; no se calculan mediante paquetes.",
+    "pasos": [
+      "Comprueba si x₀ ya satisface la tolerancia.",
+      "Evalúa f, f′ y f″ en el iterado actual.",
+      "Revisa el denominador y aplica la corrección.",
+      "Guarda la nueva aproximación y comprueba el residuo."
+    ],
+    "ejemplo": "Para f=x³−x−2 y x₀=1.5, f=−0.125, f′=5.75 y f″=9. El denominador es 67.25 y el nuevo x es aproximadamente 1.52137546.",
+    "r": "Las tres funciones se declaran explícitamente con function(x). Esto facilita revisar derivadas y evita depender de derivación simbólica externa.",
+    "cuidado": "Convergencia cúbica es una propiedad local, no una garantía para cualquier semilla. Una derivada mal escrita puede producir un resultado aparentemente razonable pero incorrecto.",
+    "conteo": "Un paso completo de Halley cuenta una iteración. Las evaluaciones de derivadas no se reportan como otro criterio de desempeño.",
+    "prueba": "Contrastar con una raíz conocida y verificar el caso donde el denominador se anula.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/raices/R04_halley.R"
+  },
+  {
+    "id": "R05",
+    "nombre": "Método de Ostrowski",
+    "familia": "Raíces",
+    "refs": [
+      12
+    ],
+    "funcion": "ostrowski(f, df, x0, tol=1e-8, max_iter=1000)",
+    "idea": "Realiza un paso de Newton y utiliza la evaluación en ese punto intermedio para corregirlo otra vez. Las dos etapas forman una actualización del algoritmo.",
+    "entradas": "f, primera derivada df y una semilla suficientemente cercana a una raíz simple.",
+    "formulas": [
+      "y_k=x_k-\\frac{f(x_k)}{f'(x_k)}",
+      "x_{k+1}=y_k-\\frac{f(y_k)}{f'(x_k)}\\frac{f(x_k)}{f(x_k)-2f(y_k)}"
+    ],
+    "simbolos": "y_k es un punto intermedio. Se reutiliza f′(x_k); no se necesita evaluar la derivada en y_k.",
+    "pasos": [
+      "Comprueba la raíz inicial y la derivada.",
+      "Calcula y mediante Newton.",
+      "Si y ya cumple, termina en ese mismo ciclo.",
+      "En otro caso revisa el nuevo denominador, corrige y registra x."
+    ],
+    "ejemplo": "Con f=x²−2 y x₀=1.5, Newton produce y≈1.41666667. La segunda corrección lleva a x≈1.4142156863, usando la derivada en 1.5. La raíz de referencia es √2≈1.4142135624.",
+    "r": "El código contempla que el punto intermedio sea ya una raíz, antes de efectuar una división adicional.",
+    "cuidado": "La forma descrita tiene orden local cuatro para raíces simples y suficiente suavidad. No conserva un intervalo y puede fallar con denominadores nulos.",
+    "conteo": "El par de refinamientos es un ciclo externo. Si la maestra pide contar subetapas, esa sería otra convención que debe registrarse y aplicarse de forma consistente.",
+    "prueba": "Usar una función lineal: el paso intermedio llega a la raíz y debe terminar con una iteración.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/raices/R05_ostrowski.R"
+  },
+  {
+    "id": "R06",
+    "nombre": "Método de Laguerre",
+    "familia": "Raíces",
+    "refs": [
+      10
+    ],
+    "funcion": "laguerre(coef, x0=0+0i, tol=1e-8, max_iter=1000)",
+    "idea": "Busca raíces de un polinomio usando su valor, sus dos primeras derivadas y su grado. La aritmética compleja permite encontrar raíces que no están en la recta real.",
+    "entradas": "Coeficientes ordenados del mayor grado al término independiente, con coeficiente inicial no nulo. Esta rutina encuentra una raíz por llamada.",
+    "formulas": [
+      "G=\\frac{P'(x)}{P(x)},\\quad H=G^2-\\frac{P''(x)}{P(x)}",
+      "x_{\\mathrm{nuevo}}=x-\\frac{n}{G\\pm\\sqrt{(n-1)(nH-G^2)}}"
+    ],
+    "simbolos": "n es el grado del polinomio. Se elige el signo que produzca el denominador de mayor módulo.",
+    "pasos": [
+      "Evalúa P antes de dividir: si ya vale cero, termina.",
+      "Calcula P, P′ y P″ con Horner simultáneo.",
+      "Forma G, H y las dos opciones del denominador.",
+      "Actualiza la raíz y revisa el módulo del residuo."
+    ],
+    "ejemplo": "Para P=x²+1 se proporciona coef=c(1,0,1). Con x₀=1, G=1 y H=0; la raíz cuadrada es compleja y la actualización llega a una raíz ±i.",
+    "r": "polinomio_derivadas() evita formar funciones derivadas nuevas. No se usa polyroot(). No se realiza deflación para obtener todas las raíces.",
+    "cuidado": "No se aplica a funciones no polinomiales como sin(x)−x. Un resultado complejo puede ser correcto aunque los coeficientes sean reales.",
+    "conteo": "Una actualización de una raíz cuenta una iteración. Obtener todas las raíces por deflación requeriría un alcance y un conteo adicionales.",
+    "prueba": "Verificar polinomios lineales, una raíz real y una compleja sin dividir entre P cuando ya es cero.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/raices/R06_laguerre.R"
+  },
+  {
+    "id": "L01",
+    "nombre": "Factorización LDLᵀ",
+    "familia": "Sistemas lineales",
+    "refs": [
+      13
+    ],
+    "funcion": "ldlt(A, b)",
+    "idea": "Separa una matriz simétrica en dos factores triangulares y uno diagonal. Después resuelve sistemas sencillos en lugar de calcular una inversa.",
+    "entradas": "Matriz A real, simétrica y definida positiva para esta variante sin pivoteo; vector b compatible.",
+    "formulas": [
+      "A=LDL^T,\\quad L_{ii}=1",
+      "D_j=A_{jj}-\\sum_{k<j}L_{jk}^2D_k",
+      "L_{ij}=\\frac{A_{ij}-\\sum_{k<j}L_{ik}L_{jk}D_k}{D_j}\\quad(i>j)",
+      "Lz=b,\\quad Dw=z,\\quad L^Tx=w"
+    ],
+    "simbolos": "L es triangular inferior con unos en la diagonal. D almacena los pivotes. z y w son resultados intermedios.",
+    "pasos": [
+      "Comprueba simetría y calcula los pivotes uno por uno.",
+      "Completa la columna de L utilizando pivotes anteriores.",
+      "Resuelve por sustitución hacia delante y divide por D.",
+      "Resuelve con Lᵀ hacia atrás para recuperar x."
+    ],
+    "ejemplo": "Para A=[[4,1],[1,3]], D=(4,11/4) y L=[[1,0],[1/4,1]]. Con b=(1,2), se obtiene z=(1,7/4), w=(1/4,7/11) y x=(1/11,7/11).",
+    "r": "Los tres sistemas se resuelven con ciclos propios. La rutina devuelve L y D para reconstruir A y revisar el desarrollo.",
+    "cuidado": "La versión general para matrices indefinidas puede necesitar pivoteo y bloques 2×2. Esta implementación rechaza un pivote no positivo.",
+    "conteo": "Es una factorización directa. No se declara que tenga cero iteraciones ni que una columna sea una iteración comparativa.",
+    "prueba": "Reconstruir L·D·Lᵀ y comprobar un sistema escalar y uno de varias incógnitas.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/sistemas/L01_ldlt.R"
+  },
+  {
+    "id": "L02",
+    "nombre": "Sobrerrelajación sucesiva SOR",
+    "familia": "Sistemas lineales",
+    "refs": [
+      14
+    ],
+    "funcion": "sor(A, b, x0, omega, tol=1e-8, max_iter=10000)",
+    "idea": "Actualiza las incógnitas en orden, como Gauss–Seidel, y mezcla la actualización con el valor anterior mediante omega. Elegir omega modifica el recorrido y el número de barridos.",
+    "entradas": "A, b, un vector inicial, omega y controles de terminación. La diagonal de A debe ser no nula.",
+    "formulas": [
+      "\\widehat{x}_i=\\frac{b_i-\\sum_{j<i}a_{ij}x_j^{(k+1)}-\\sum_{j>i}a_{ij}x_j^{(k)}}{a_{ii}}",
+      "x_i^{(k+1)}=(1-\\omega)x_i^{(k)}+\\omega\\widehat{x}_i"
+    ],
+    "simbolos": "Dentro de un barrido se usan las incógnitas recién calculadas a la izquierda y las del barrido anterior a la derecha.",
+    "pasos": [
+      "Guarda una copia del vector anterior.",
+      "Recorre todas las filas y calcula cada incógnita.",
+      "Aplica la mezcla con omega.",
+      "Después del barrido completo comprueba el residuo del sistema."
+    ],
+    "ejemplo": "Con A=[[4,1],[1,3]], b=(1,2), x⁰=(0,0), omega=1.1, el primer valor es x₁=0.275. El segundo es x₂=1.1(2−0.275)/3=0.6325.",
+    "r": "anterior guarda el vector del comienzo del barrido. sor(..., omega=1) reproduce Gauss–Seidel.",
+    "cuidado": "Para matrices simétricas definidas positivas, 0<omega<2 garantiza convergencia. Ese intervalo por sí solo no garantiza convergencia para cualquier A. omega>1 no siempre reduce iteraciones.",
+    "conteo": "Se cuenta un barrido completo del vector, no una iteración por incógnita. Se comprueba también el vector inicial antes del primer barrido.",
+    "prueba": "Comparar omega=1 con Gauss–Seidel y comprobar convergencia, inicio exacto y límite de barridos.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/sistemas/L02_sor.R"
+  },
+  {
+    "id": "L03",
+    "nombre": "Iteración de Richardson",
+    "familia": "Sistemas lineales",
+    "refs": [
+      15
+    ],
+    "funcion": "richardson(A, b, x0, omega, tol=1e-8, max_iter=10000)",
+    "idea": "El residuo indica cuánto falta para satisfacer Ax=b. Richardson avanza en esa dirección multiplicada por un parámetro. Un paso demasiado grande puede hacer que el proceso diverja.",
+    "entradas": "Matriz A, vector b, aproximación inicial y un omega elegido para el problema.",
+    "formulas": [
+      "r_k=b-Ax_k,\\quad x_{k+1}=x_k+\\omega r_k",
+      "e_{k+1}=(I-\\omega A)e_k"
+    ],
+    "simbolos": "r_k es el residuo; e_k representa el error respecto a la solución exacta. No hace falta conocer e para ejecutar el método.",
+    "pasos": [
+      "Calcula el residuo del vector inicial.",
+      "Multiplica ese residuo por omega.",
+      "Suma la corrección al vector completo.",
+      "Comprueba el nuevo residuo y repite."
+    ],
+    "ejemplo": "En el sistema A=[[4,1],[1,3]], b=(1,2), x⁰=(0,0), omega=0.2, la primera actualización es (0.2,0.4). Su residuo es (−0.2,0.6), de modo que la segunda es (0.16,0.52).",
+    "r": "El producto A %*% x es una operación matricial básica; no resuelve el sistema. omega es obligatorio para evitar una elección silenciosa.",
+    "cuidado": "Para A simétrica definida positiva basta 0<omega<2/λ_max. El código limita barridos pero no certifica esa condición para toda matriz.",
+    "conteo": "Una actualización del vector completo es una iteración externa. Su interpretación comparativa queda escrita junto al caso.",
+    "prueba": "Comprobar una solución conocida con un omega estable y que un límite pequeño se reporte como falta de convergencia.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/sistemas/L03_richardson.R"
+  },
+  {
+    "id": "L04",
+    "nombre": "Proyección por filas de Kaczmarz",
+    "familia": "Sistemas lineales",
+    "refs": [
+      16
+    ],
+    "funcion": "kaczmarz(A, b, x0, tol=1e-8, max_iter=10000)",
+    "idea": "Interpreta cada ecuación como una recta o hiperplano. Proyecta la aproximación sobre una ecuación y luego sobre la siguiente. Cumplir una fila puede alterar el cumplimiento de las anteriores.",
+    "entradas": "Matriz con filas no nulas, vector b y x inicial. La variante cíclica se usa aquí para sistemas compatibles.",
+    "formulas": [
+      "x_{\\mathrm{nuevo}}=x+\\frac{b_i-a_i x}{\\|a_i\\|_2^2}a_i^T"
+    ],
+    "simbolos": "a_i es una fila de A. El denominador es la suma de cuadrados de esa fila. En un barrido se visitan todas las filas en el mismo orden.",
+    "pasos": [
+      "Calcula la norma cuadrada de cada fila.",
+      "Proyecta sobre la primera ecuación.",
+      "Continúa con las restantes usando el vector actualizado.",
+      "Al terminar el barrido comprueba el residuo de todo el sistema."
+    ],
+    "ejemplo": "Para la fila 4x₁+x₂=1, empezando en (0,0), la corrección es (1/17)(4,1). El nuevo punto (4/17,1/17) cumple esa ecuación exactamente.",
+    "r": "Se guardan barridos y proyecciones por separado en el historial. La rutina también permite matrices rectangulares compatibles.",
+    "cuidado": "No se debe confundir la variante cíclica con la aleatoria del título de la referencia: se utiliza la proyección clásica descrita en su introducción. Para sistemas incompatibles se necesita otro tratamiento.",
+    "conteo": "Said debe confirmar si quiere contar una proyección o un barrido. iteraciones se mantiene sin valor para evitar mezclar unidades.",
+    "prueba": "Construir un sistema rectangular compatible a partir de una solución conocida y recuperar ese vector.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/sistemas/L04_kaczmarz.R"
+  },
+  {
+    "id": "L05",
+    "nombre": "Eliminación por bloques con complemento de Schur",
+    "familia": "Sistemas lineales",
+    "refs": [
+      17
+    ],
+    "funcion": "schur(A, b, corte)",
+    "idea": "Divide las incógnitas en dos grupos. Elimina el primero para resolver un sistema más pequeño en el segundo y después recupera el grupo eliminado.",
+    "entradas": "A y b; corte indica cuántas incógnitas pertenecen al primer bloque. El bloque usado y su complemento deben ser invertibles.",
+    "formulas": [
+      "Bx+Cy=f,\\quad Dx+Ey=g",
+      "BY=C,\\quad Bz=f,\\quad S=E-DY",
+      "Sy=g-Dz,\\quad Bx=f-Cy"
+    ],
+    "simbolos": "La notación evita calcular B⁻¹: Y y z se obtienen resolviendo sistemas. S es el complemento de Schur del bloque B.",
+    "pasos": [
+      "Separa A y b de acuerdo con corte.",
+      "Resuelve los sistemas del bloque B para Y y z.",
+      "Forma S y resuelve el sistema de y.",
+      "Sustituye y en el bloque original para obtener x."
+    ],
+    "ejemplo": "En [[4,1],[1,3]] con corte=1, B=4 y S=3−1/4=11/4. El lado derecho reducido es 2−1/4=7/4. Por eso y=7/11 y x=(1−y)/4=1/11.",
+    "r": "Se usa drop=FALSE para conservar matrices de una fila o columna. Cada sistema auxiliar utiliza gauss_propio(), con pivoteo parcial.",
+    "cuidado": "Que A sea invertible no garantiza que el bloque B elegido sea invertible. Un corte inadecuado puede impedir esta forma de eliminación.",
+    "conteo": "La eliminación por bloques es directa. El conteo de los sistemas auxiliares no se suma como iteraciones del método sin una definición docente.",
+    "prueba": "Recuperar una solución conocida para varios cortes y comprobar el comportamiento cuando un bloque es singular.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/sistemas/L05_schur.R"
+  },
+  {
+    "id": "L06",
+    "nombre": "Reducción cíclica",
+    "familia": "Sistemas lineales",
+    "refs": [
+      18
+    ],
+    "funcion": "reduccion_ciclica(inferior, diagonal, superior, b)",
+    "idea": "En un sistema tridiagonal, cada incógnita solo se relaciona con sus vecinas. Se eliminan incógnitas alternadas para producir otro sistema tridiagonal más pequeño; al final se recuperan las eliminadas.",
+    "entradas": "Cuatro vectores del mismo tamaño: diagonal inferior, principal, superior y b. inferior[1]=0 y superior[n]=0.",
+    "formulas": [
+      "a_ix_{i-1}+d_ix_i+c_ix_{i+1}=b_i",
+      "\\alpha=-a_i/d_{i-1},\\quad \\beta=-c_i/d_{i+1}",
+      "\\widetilde d_i=d_i+\\alpha c_{i-1}+\\beta a_{i+1},\\quad \\widetilde b_i=b_i+\\alpha b_{i-1}+\\beta b_{i+1}",
+      "\\widetilde a_i=\\alpha a_{i-1},\\quad \\widetilde c_i=\\beta c_{i+1}"
+    ],
+    "simbolos": "Los términos de un vecino se omiten si no existe. Los nuevos coeficientes conectan vecinos a dos posiciones de distancia.",
+    "pasos": [
+      "Conserva posiciones impares y elimina las pares.",
+      "Construye el sistema reducido con las ecuaciones de los vecinos.",
+      "Repite hasta una sola incógnita.",
+      "Reconstruye cada incógnita par usando sus dos vecinas ya conocidas."
+    ],
+    "ejemplo": "Para 2x₁−x₂=1, −x₁+2x₂−x₃=0 y −x₂+2x₃=1, eliminar x₂ deja 1.5x₁−0.5x₃=1 y −0.5x₁+1.5x₃=1. El resultado es (1,1,1).",
+    "r": "La función interna reducir() realiza la recursión. Los vectores de cada nivel se mantienen separados para recuperar después las posiciones eliminadas.",
+    "cuidado": "Necesita pivotes no nulos. Esta es una implementación serial académica, no una implementación paralela para GPU.",
+    "conteo": "Se registran niveles de reducción como información técnica, pero la equivalencia con iteraciones comparativas está pendiente.",
+    "prueba": "Resolver tamaños pares, impares y el caso de una sola ecuación; no asumir que n debe ser potencia de dos.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/sistemas/L06_reduccion_ciclica.R"
+  },
+  {
+    "id": "Q01",
+    "nombre": "Regla de Boole",
+    "familia": "Integración",
+    "refs": [
+      19
+    ],
+    "funcion": "boole(f, a, b, n=4)",
+    "idea": "Estima el área de un panel usando cinco valores equiespaciados. La versión compuesta repite paneles de cuatro subintervalos.",
+    "entradas": "Función, límites a<b y número n de subintervalos múltiplo de cuatro.",
+    "formulas": [
+      "h=\\frac{b-a}{4},\\quad Q=\\frac{2h}{45}(7f_0+32f_1+12f_2+32f_3+7f_4)"
+    ],
+    "simbolos": "La fórmula muestra un panel. En la versión compuesta, h=(b−a)/n y cada grupo de cuatro subintervalos aporta un panel.",
+    "pasos": [
+      "Verifica n múltiplo de cuatro.",
+      "Calcula h y divide el intervalo en paneles.",
+      "Evalúa cinco puntos por panel y aplica los pesos.",
+      "Suma las contribuciones de todos los paneles."
+    ],
+    "ejemplo": "Para ∫₀¹x⁴ dx con un panel, h=1/4 y las muestras son 0,1/256,1/16,81/256,1. La suma ponderada produce 1/5, que es el valor exacto.",
+    "r": "Los pesos c(7,32,12,32,7) se escriben explícitamente. n=4 significa cinco nodos, no cuatro.",
+    "cuidado": "Boole es exacta para polinomios de grado hasta cinco. Eso no implica exactitud para cualquier función. No aceptar n=7 como si fuera un panel válido.",
+    "conteo": "Un panel, un nodo y una iteración de refinamiento son conceptos distintos. El criterio de Said sigue pendiente.",
+    "prueba": "Integrar x⁵ exactamente salvo redondeo y rechazar un n incompatible.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/integracion/Q01_boole.R"
+  },
+  {
+    "id": "Q02",
+    "nombre": "Gauss Chebyshev de primera especie",
+    "familia": "Integración",
+    "refs": [
+      20,
+      21
+    ],
+    "funcion": "gauss_chebyshev(g, n=4)",
+    "idea": "Selecciona nodos especiales para una integral que incluye el peso 1/√(1−x²). Todos los pesos de cuadratura son iguales.",
+    "entradas": "g es la parte de la función que multiplica el peso. El intervalo de esta rutina es [−1,1].",
+    "formulas": [
+      "\\int_{-1}^{1}\\frac{g(x)}{\\sqrt{1-x^2}}\\,dx\\approx\\frac{\\pi}{n}\\sum_{k=1}^{n}g\\left(\\cos\\frac{(2k-1)\\pi}{2n}\\right)"
+    ],
+    "simbolos": "n es el número de nodos. La función g no debe volver a incluir el peso que ya aparece en la fórmula.",
+    "pasos": [
+      "Calcula los ángulos de los n nodos.",
+      "Obtén cada nodo con coseno.",
+      "Evalúa g en cada uno.",
+      "Suma y multiplica por π/n."
+    ],
+    "ejemplo": "Para g=x² y n=2, los nodos son ±√2/2. Ambos valores g son 1/2, por lo que la integral ponderada vale π/2.",
+    "r": "No se usan tablas externas ni un generador de cuadratura de un paquete. El cambio a una integral ordinaria requiere definir una g transformada y documentarla.",
+    "cuidado": "No calcula directamente ∫g(x)dx sin peso. Si se compara con una regla ordinaria, ambas deben representar exactamente la misma integral transformada y el mismo dominio.",
+    "conteo": "nodos no se reporta automáticamente como iteraciones. Pendiente de definición docente.",
+    "prueba": "Integrar la constante 1 para obtener π y x² para obtener π/2.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/integracion/Q02_gauss_chebyshev.R"
+  },
+  {
+    "id": "Q03",
+    "nombre": "Gauss Hermite",
+    "familia": "Integración",
+    "refs": [
+      20,
+      22
+    ],
+    "funcion": "gauss_hermite(g, n=4)",
+    "idea": "Está diseñada para integrales sobre toda la recta con peso exp(−x²). Sus nodos son ceros de los polinomios de Hermite en la convención de físicos.",
+    "entradas": "g representa el factor adicional al peso gaussiano. Esta implementación admite entre 1 y 20 nodos.",
+    "formulas": [
+      "H_0=1,\\quad H_1=2x,\\quad H_n=2xH_{n-1}-2(n-1)H_{n-2}",
+      "\\int_{-\\infty}^{\\infty}e^{-x^2}g(x)\\,dx\\approx\\sum_iw_i g(x_i)",
+      "w_i=\\frac{2^{n-1}n!\\sqrt{\\pi}}{n^2[H_{n-1}(x_i)]^2}"
+    ],
+    "simbolos": "Los x_i son raíces de H_n. Las raíces se intercalan entre las del grado anterior, lo que permite encerrarlas y calcularlas con bisección propia.",
+    "pasos": [
+      "Genera los polinomios mediante su recurrencia.",
+      "Encierra las raíces usando las del grado anterior y una cota exterior.",
+      "Calcula nodos con el auxiliar de bisección y después sus pesos.",
+      "Evalúa g y acumula la suma ponderada."
+    ],
+    "ejemplo": "Para n=2, los nodos son ±1/√2 y ambos pesos √π/2. Con g=x², la suma es √π/2≈0.886226925.",
+    "r": "La generación de nodos se desarrolla dentro del proyecto; no se usa eigen(), polyroot() ni un paquete de cuadratura. El límite n≤20 corresponde al alcance validado de este código.",
+    "cuidado": "No confundir exp(−x²) con exp(−x²/2), que usa otra convención y otro escalado. Tampoco es una integral ordinaria en un intervalo finito.",
+    "conteo": "El cálculo auxiliar de las raíces de Hermite no se mezcla con iteraciones de desempeño de la integración.",
+    "prueba": "Comprobar momentos pares conocidos y que los pesos sumen √π.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/integracion/Q03_gauss_hermite.R"
+  },
+  {
+    "id": "Q04",
+    "nombre": "Gauss Lobatto Legendre",
+    "familia": "Integración",
+    "refs": [
+      20
+    ],
+    "funcion": "gauss_lobatto(f, a, b, n=4)",
+    "idea": "Elige nodos de cuadratura que incluyen ambos extremos. Los interiores se obtienen de la derivada de un polinomio de Legendre.",
+    "entradas": "Una función en [a,b] y n nodos totales, incluidos los extremos. Se admiten entre 2 y 20.",
+    "formulas": [
+      "x_1=-1,\\quad x_n=1,\\quad P'_{n-1}(x_i)=0\\quad(1<i<n)",
+      "w_i=\\frac{2}{n(n-1)[P_{n-1}(x_i)]^2}",
+      "t_i=\\frac{a+b}{2}+\\frac{b-a}{2}x_i,\\quad Q=\\frac{b-a}{2}\\sum_iw_i f(t_i)"
+    ],
+    "simbolos": "P es un polinomio de Legendre. La transformación de t y el factor (b−a)/2 son necesarios fuera de [−1,1].",
+    "pasos": [
+      "Agrega los extremos −1 y 1.",
+      "Calcula los nodos interiores a partir de P′.",
+      "Calcula los pesos en todos los nodos.",
+      "Transforma al intervalo pedido y suma las evaluaciones."
+    ],
+    "ejemplo": "Con n=3, los nodos son −1,0,1 y los pesos 1/3,4/3,1/3. Para x² en [−1,1], el resultado es 2/3.",
+    "r": "Los polinomios de Legendre se evalúan por recurrencia. Sus ceros ayudan a encerrar los de la derivada, calculados con bisección propia.",
+    "cuidado": "n cuenta nodos, no subintervalos. La exactitud polinomial es 2n−3. Incluir los extremos impide evaluar integrandos que sean infinitos allí sin un tratamiento adicional.",
+    "conteo": "El número de nodos y las bisecciones auxiliares quedan separados del conteo comparativo pendiente.",
+    "prueba": "Reproducir polinomios hasta grado 2n−3 y verificar el cambio de intervalo.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/integracion/Q04_gauss_lobatto.R"
+  },
+  {
+    "id": "Q05",
+    "nombre": "Clenshaw Curtis",
+    "familia": "Integración",
+    "refs": [
+      23
+    ],
+    "funcion": "clenshaw_curtis(f, a, b, n=5)",
+    "idea": "Interpola la función en nodos de Chebyshev que se concentran cerca de los extremos e integra ese interpolante. Los pesos pueden calcularse directamente con sumas de cosenos.",
+    "entradas": "Función en un intervalo finito y al menos tres nodos, incluidos los extremos.",
+    "formulas": [
+      "x_j=\\cos(j\\pi/N),\\quad j=0,\\ldots,N,\\quad N=n-1",
+      "w_j=\\frac{2\\delta_j}{N}\\left[1-\\sum_{k=1}^{\\lfloor(N-1)/2\\rfloor}\\frac{2\\cos(2kj\\pi/N)}{4k^2-1}-E_j\\right]"
+    ],
+    "simbolos": "δ_j vale 1/2 en los extremos y 1 dentro. E_j=cos(jπ)/(N²−1) si N es par, y cero si es impar. Después se transforma de [−1,1] a [a,b].",
+    "pasos": [
+      "Genera los nodos coseno.",
+      "Calcula los pesos con la suma y el término de paridad.",
+      "Transforma nodos y pesos al intervalo pedido.",
+      "Evalúa f y suma sus contribuciones."
+    ],
+    "ejemplo": "Con tres nodos se obtienen −1,0,1 y pesos 1/3,4/3,1/3. Con cinco nodos, la integral de x⁴ en [−1,1] resulta 2/5.",
+    "r": "El código distingue N par e impar. No usa una transformada rápida ni dependencias externas para calcular los pesos.",
+    "cuidado": "No confundir la ubicación de los nodos con la de Gauss–Chebyshev: aquí se incluyen los extremos y se integra sin el peso singular.",
+    "conteo": "Los ciclos de cálculo de pesos y los nodos no se convierten en iteraciones comparativas sin confirmación.",
+    "prueba": "Los pesos deben sumar la longitud del intervalo; comprobar polinomios interpolables.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/integracion/Q05_clenshaw_curtis.R"
+  },
+  {
+    "id": "Q06",
+    "nombre": "Integración Monte Carlo simple",
+    "familia": "Integración",
+    "refs": [
+      24
+    ],
+    "funcion": "monte_carlo(f, a, b, n=10000, semilla=2026)",
+    "idea": "Estima el promedio de la función usando puntos uniformes al azar y lo multiplica por la longitud del intervalo. Repetir con otra semilla puede producir un resultado distinto.",
+    "entradas": "Función de varianza finita sobre [a,b], número de muestras n≥2 y semilla.",
+    "formulas": [
+      "X_i\\sim U(a,b),\\quad Q_N=\\frac{b-a}{N}\\sum_{i=1}^{N}f(X_i)",
+      "\\widehat{\\mathrm{SE}}=(b-a)\\frac{s_f}{\\sqrt{N}}"
+    ],
+    "simbolos": "s_f es la desviación estándar de los valores muestreados. El error estándar estima incertidumbre estadística; no es una cota garantizada del error.",
+    "pasos": [
+      "Fija la semilla y genera un punto uniforme por muestra.",
+      "Evalúa f y actualiza la suma y la media.",
+      "Actualiza una suma de desviaciones cuadradas sin guardar todas las muestras.",
+      "Devuelve la estimación y el error estándar."
+    ],
+    "ejemplo": "Si f=3 en [2,5], cualquier muestra produce 3, el promedio es 3 y el resultado es 9. Para x² en [0,1], la referencia exacta es 1/3 y la estimación varía por muestreo.",
+    "r": "runif() y set.seed() forman parte de una instalación estándar de R. No se instala ni carga un paquete externo. La función restaura el estado aleatorio anterior.",
+    "cuidado": "Con varianza finita, el error típico decrece como 1/√N; multiplicar N por cuatro reduce aproximadamente a la mitad ese error, no garantiza un valor exacto.",
+    "conteo": "Said debe indicar si una muestra o un lote constituye una iteración. No se equipara automáticamente N con iteraciones de otros métodos.",
+    "prueba": "Función constante exacta, repetición con la misma semilla y preservación del estado aleatorio.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/integracion/Q06_monte_carlo.R"
+  },
+  {
+    "id": "E01",
+    "nombre": "Adams Bashforth de dos pasos",
+    "familia": "EDO",
+    "refs": [
+      25
+    ],
+    "funcion": "adams_bashforth2(f, a, b, y0, n=20)",
+    "idea": "Para avanzar en una EDO de primer orden utiliza la pendiente actual y la del punto anterior. Es explícito: el nuevo valor se obtiene sin resolver una ecuación adicional.",
+    "entradas": "y′=f(t,y), intervalo, valor inicial y n pasos uniformes, n≥2.",
+    "formulas": [
+      "y_{k+1}=y_k+\\frac{h}{2}(3f_k-f_{k-1}),\\quad f_k=f(t_k,y_k)"
+    ],
+    "simbolos": "Dos pasos significa que la fórmula necesita dos niveles previos. El valor y₁ se obtiene con un paso de RK4; después comienza AB2.",
+    "pasos": [
+      "Calcula h y la malla.",
+      "Obtén y₁ con RK4 propio.",
+      "Combina la pendiente actual y la anterior.",
+      "Desplaza el historial y continúa hasta el extremo."
+    ],
+    "ejemplo": "Para y′=y, y(0)=1, h=0.1, RK4 produce y₁≈1.10517083. Entonces y₂≈1.10517083+0.05(3·1.10517083−1)=1.22094646.",
+    "r": "El historial guarda t e y. El arranque no se ejecuta con valores exactos ocultos: lo calcula rk4_paso().",
+    "cuidado": "El orden global es dos bajo condiciones adecuadas. Un método explícito puede requerir pasos pequeños por estabilidad, aunque la fórmula sea sencilla.",
+    "conteo": "Se guardan pasos de malla y un paso de arranque. Su uso como iteraciones de desempeño está pendiente.",
+    "prueba": "Resolver y′=y y verificar que al reducir h a la mitad el error se reduzca aproximadamente por un factor cuatro.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/edo/E01_adams_bashforth2.R"
+  },
+  {
+    "id": "E02",
+    "nombre": "Adams Moulton de dos pasos y orden tres",
+    "familia": "EDO",
+    "refs": [
+      25
+    ],
+    "funcion": "adams_moulton3(f, a, b, y0, n=20, dfdy=NULL)",
+    "idea": "Aprovecha una pendiente futura junto con dos conocidas. Como la pendiente futura depende del valor todavía desconocido, hay que resolver una ecuación en cada avance.",
+    "entradas": "EDO de primer orden, dato inicial y malla uniforme. dfdy es opcional; si falta, se usa una diferencia central propia.",
+    "formulas": [
+      "y_{k+1}=y_k+\\frac{h}{12}(5f_{k+1}+8f_k-f_{k-1})",
+      "F(z)=z-y_k-\\frac{h}{12}[5f(t_{k+1},z)+8f_k-f_{k-1}]=0"
+    ],
+    "simbolos": "AM3 indica orden tres, aunque el método utiliza dos pasos. F es la ecuación que resuelve Newton interno, no una nueva EDO.",
+    "pasos": [
+      "Obtén y₁ con RK4.",
+      "Forma F para el siguiente punto.",
+      "Usa una predicción de Euler como inicio de Newton.",
+      "Acepta la solución interna solo si cumple su tolerancia y guarda el avance."
+    ],
+    "ejemplo": "Para y′=y y h=0.1, la ecuación puede despejarse: y_(k+1)=[(1+8h/12)y_k−(h/12)y_(k−1)]/(1−5h/12). Esta forma permite comprobar el resultado del Newton interno.",
+    "r": "tol_interna y max_interna controlan únicamente la solución de F. El historial guarda el número de actualizaciones internas por paso.",
+    "cuidado": "Una sola corrección predictor–corrector no equivale a resolver esta ecuación implícita hasta tolerancia. La variante implementada sí intenta resolverla.",
+    "conteo": "Pasos de malla y Newton interno quedan separados; Said debe definir cómo quiere contabilizarlos.",
+    "prueba": "Comprobar una EDO con solución exacta y concordancia entre derivada analítica y diferencia central.",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/edo/E02_adams_moulton3.R"
+  },
+  {
+    "id": "E03",
+    "nombre": "Diferenciación hacia atrás BDF2",
+    "familia": "EDO",
+    "refs": [
+      25
+    ],
+    "funcion": "bdf2(f, a, b, y0, n=20, dfdy=NULL)",
+    "idea": "Aproxima la derivada futura utilizando tres valores sucesivos de la solución. Es un método implícito de dos pasos y orden dos.",
+    "entradas": "Problema y′=f(t,y), valor inicial y paso constante. El segundo valor se genera con RK4.",
+    "formulas": [
+      "3y_{k+1}-4y_k+y_{k-1}=2hf(t_{k+1},y_{k+1})",
+      "F(z)=3z-4y_k+y_{k-1}-2hf(t_{k+1},z)=0"
+    ],
+    "simbolos": "El nuevo valor aparece tanto fuera como dentro de f. Por eso no basta sustituir directamente y_k donde debe estar y_(k+1).",
+    "pasos": [
+      "Construye la malla y el arranque.",
+      "Forma la ecuación implícita en z.",
+      "Resuélvela con Newton propio y controles internos.",
+      "Guarda el resultado junto con el historial de la solución."
+    ],
+    "ejemplo": "Si y′=y, queda (3−2h)y_(k+1)=4y_k−y_(k−1). Este despeje permite comparar la solución de Newton interno con una cuenta manual.",
+    "r": "Si se entrega dfdy, la derivada interna es 3−2h·dfdy. De lo contrario se aproxima F′ por diferencia central.",
+    "cuidado": "El paso es constante en esta implementación. Cambiar arbitrariamente h y mantener los mismos coeficientes deja de ser esta fórmula BDF2.",
+    "conteo": "El número de pasos de malla no se suma automáticamente a las iteraciones internas. Criterio pendiente.",
+    "prueba": "Para y′=y, al dividir h entre dos debe observarse la reducción de error propia de orden dos.",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/edo/E03_bdf2.R"
+  },
+  {
+    "id": "E04",
+    "nombre": "Predictor corrector de Hamming modificado",
+    "familia": "EDO",
+    "refs": [
+      26
+    ],
+    "funcion": "hamming(f, a, b, y0, n=20)",
+    "idea": "Usa cuatro niveles de la solución para predecir, modificar y corregir el valor futuro. Guarda la diferencia entre predicción y corrección para ajustar el siguiente avance.",
+    "entradas": "EDO de primer orden, malla uniforme con n≥4 y cuatro valores de arranque; tres se calculan con RK4.",
+    "formulas": [
+      "p_{k+1}=y_{k-3}+\\frac{4h}{3}(2f_k-f_{k-1}+2f_{k-2})",
+      "m_{k+1}=p_{k+1}+\\frac{112}{121}(c_k-p_k)",
+      "c_{k+1}=\\frac{9y_k-y_{k-2}}{8}+\\frac{3h}{8}[2f_k-f_{k-1}+f(t_{k+1},m_{k+1})]",
+      "y_{k+1}=c_{k+1}+\\frac{9}{121}(p_{k+1}-c_{k+1})"
+    ],
+    "simbolos": "p es predictor sin modificar; m es predictor modificado; c es corrector. Es necesario conservar p y c originales para el siguiente ciclo.",
+    "pasos": [
+      "Calcula y₁,y₂,y₃ con RK4 y comienza con diferencia histórica cero.",
+      "Calcula p y aplica la modificación con el historial.",
+      "Evalúa la pendiente futura en m y calcula c.",
+      "Obtén y, conserva p y c y actualiza las pendientes conocidas."
+    ],
+    "ejemplo": "Para y′=y, y(0)=1 y h=0.1, los primeros cuatro datos se obtienen con RK4. El primer predictor usa y₀ y las pendientes de los niveles 1,2,3; su modificación inicial es cero porque aún no existe una diferencia predictor–corrector previa.",
+    "r": "Se guardan columnas predictor y corrector. No se sustituye el predictor original por el valor final al actualizar la diferencia histórica.",
+    "cuidado": "La página de referencia contiene una errata tipográfica en una fórmula de texto; se sigue el bloque Program y se documentan las cuatro etapas.",
+    "conteo": "Las cuatro etapas no se convierten sin más en cuatro iteraciones. Se guarda el avance de malla y queda pendiente el criterio comparativo.",
+    "prueba": "Comparar con exp(t) y comprobar reducción del error al refinar la malla.",
+    "responsable": "Luis",
+    "revisor": "Tadeo",
+    "archivo": "R/edo/E04_hamming.R"
+  },
+  {
+    "id": "E05",
+    "nombre": "Störmer Verlet con velocidades",
+    "familia": "EDO",
+    "refs": [
+      27
+    ],
+    "funcion": "verlet(aceleracion, a, b, y0, v0, n=20)",
+    "idea": "Actualiza posición y velocidad utilizando la aceleración antes y después del avance. Es apropiado para ecuaciones de movimiento cuya aceleración depende del tiempo y la posición.",
+    "entradas": "Aceleración a(t,y), posición y velocidad iniciales, intervalo y paso uniforme.",
+    "formulas": [
+      "y_{k+1}=y_k+h v_k+\\frac{h^2}{2}a(t_k,y_k)",
+      "v_{k+1}=v_k+\\frac{h}{2}[a(t_k,y_k)+a(t_{k+1},y_{k+1})]"
+    ],
+    "simbolos": "La aceleración futura se evalúa en la nueva posición. Ambas condiciones iniciales son necesarias para un problema de segundo orden.",
+    "pasos": [
+      "Calcula la aceleración actual.",
+      "Avanza la posición.",
+      "Calcula la aceleración en la nueva posición y el tiempo futuro.",
+      "Promedia ambas aceleraciones para actualizar la velocidad."
+    ],
+    "ejemplo": "Para y″=−y, y₀=1, v₀=0 y h=0.1, la posición siguiente es 0.995. La nueva aceleración es −0.995 y v₁=−0.09975.",
+    "r": "El historial contiene t, y y v. El resultado principal es la posición final; la velocidad sigue disponible en la tabla.",
+    "cuidado": "Esta fórmula no cubre directamente una aceleración dependiente de la velocidad, como cierto rozamiento. No requiere otro método para iniciar el primer paso.",
+    "conteo": "El avance de posición y velocidad pertenece a un mismo paso físico. Su equivalencia con iteraciones debe confirmarse.",
+    "prueba": "Usar el oscilador armónico: posición cos(t) y velocidad −sin(t).",
+    "responsable": "Tadeo",
+    "revisor": "Roberto",
+    "archivo": "R/edo/E05_verlet.R"
+  },
+  {
+    "id": "E06",
+    "nombre": "Método de Numerov",
+    "familia": "EDO",
+    "refs": [
+      28
+    ],
+    "funcion": "numerov(g, s, a, b, y0, v0, n=20)",
+    "idea": "Aprovecha la estructura de una EDO lineal de segundo orden sin término de primera derivada para relacionar tres nodos. En la forma entregada se resuelve un problema de valor inicial.",
+    "entradas": "La ecuación debe escribirse y″=g(t)y+s(t). Se proporcionan posición y velocidad iniciales; el segundo valor de posición se genera con un paso RK4 del sistema equivalente.",
+    "formulas": [
+      "\\left(1-\\frac{h^2g_{k+1}}{12}\\right)y_{k+1}=2\\left(1+\\frac{5h^2g_k}{12}\\right)y_k",
+      "\\qquad-\\left(1-\\frac{h^2g_{k-1}}{12}\\right)y_{k-1}+\\frac{h^2}{12}(s_{k+1}+10s_k+s_{k-1})"
+    ],
+    "simbolos": "g y s se evalúan en los nodos de la malla. Si un libro escribe y″=−q(t)y+s(t), entonces g=−q.",
+    "pasos": [
+      "Reescribe correctamente la ecuación y separa g de s.",
+      "Obtén y₁ con RK4 usando y′=v y v′=g(t)y+s(t).",
+      "Calcula el lado derecho de la recurrencia.",
+      "Comprueba el denominador futuro, despeja y y continúa."
+    ],
+    "ejemplo": "Para y″=−y, y(0)=0, v(0)=1, g=−1 y s=0. La fórmula queda (1+h²/12)y_(k+1)=2(1−5h²/12)y_k−(1+h²/12)y_(k−1). La solución de referencia es sin(t).",
+    "r": "La rutina no utiliza valores exactos de sin(h) para iniciar; calcula el arranque. El código no resuelve automáticamente problemas de frontera.",
+    "cuidado": "No confundir el defecto local de la recurrencia con el error global acumulado. Una ecuación con y′ o no lineal requiere otro tratamiento.",
+    "conteo": "Se distinguen el paso de arranque y los avances de la recurrencia. Conteo comparativo pendiente.",
+    "prueba": "Oscilador con solución sin(t) y ecuación y″=2, cuya solución con datos cero es t².",
+    "responsable": "Roberto",
+    "revisor": "Luis",
+    "archivo": "R/edo/E06_numerov.R"
+  }
+]

@@ -1,0 +1,4 @@
+"caso","metodo","iteraciones","convergio","tolerancia","unidad"
+"A=[[4,1],[1,3]] b=[1,2]","Gauss_Seidel",8,TRUE,1e-08,"Actualizacion completa del vector"
+"A=[[4,1],[1,3]] b=[1,2]","SOR_omega_1_1",9,TRUE,1e-08,"Actualizacion completa del vector"
+"A=[[4,1],[1,3]] b=[1,2]","Richardson_omega_0_2",28,TRUE,1e-08,"Actualizacion completa del vector"
